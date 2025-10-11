@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Smart Irrigation Advisor</title>
+<style>
+  body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #74b9ff, #a29bfe);
+    color: #fff;
+    text-align: center;
+    padding: 40px;
+  }
+  .container {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 550px;
+    margin: auto;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  }
+  select, button {
+    margin-top: 15px;
+    padding: 10px;
+    border: none;
+    border-radius: 10px;
+  }
+  select {
+    width: 80%;
+  }
+  button {
+    background-color: #0984e3;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #74b9ff;
+  }
+  .output {
+    margin-top: 20px;
+    padding: 15px;
+    background-color: rgba(255,255,255,0.1);
+    border-radius: 10px;
+  }
+  .history {
+    margin-top: 20px;
+    text-align: left;
+    background-color: rgba(255,255,255,0.1);
+    padding: 15px;
+    border-radius: 10px;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <h1>🌾 Smart Irrigation Advisor</h1>
+  <p>Select your crop and find out whether irrigation is needed today.</p>
+
+  <!-- Crop Selection Dropdown -->
+  <select id="cropName">
+    <option value="">-- Select Crop --</option>
+    <option value="Rice">Rice - धान - ಅಕ್ಕಿ</option>
+    <option value="Wheat">Wheat - गेहूं - ಗೋಧಿ</option>
+    <option value="Sugarcane">Sugarcane - गन्ना - ಕರಿಬೇಲು</option>
+    <option value="Maize">Maize - मक्का - ಜೋಳ</option>
+    <option value="Cotton">Cotton - कपास - ಹತ್ತಿ</option>
+    <option value="Pulses">Pulses - दालें - ಬೇಳೆ</option>
+    <option value="Groundnut">Groundnut - मूंगफली - ಕಡಲೆಕಾಯಿ</option>
+    <option value="Millets">Millets - बाजरा - ಸಜ್ಜೆ</option>
+    <option value="Soybean">Soybean - सोयाबीन - ಸೋಯಾಬೀನ್</option>
+    <option value="Sunflower">Sunflower - सूरजमुखी - ಸೂರ್ಯಕಾಂತಿ</option>
+    <option value="Onion">Onion - प्याज - ಈರುಳ್ಳಿ</option>
+    <option value="Tomato">Tomato - टमाटर - ಟೊಮೆಟೊ</option>
+  </select>
+
+  <br />
+  <button onclick="checkIrrigation()">Check</button>
+
+  <div class="output" id="output"></div>
+  <div class="history" id="history">
+    <h3>Recent History</h3>
+    <ul id="historyList"></ul>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+
+<script>
+  // ====== FIREBASE CONFIG (replace with your Firebase credentials) ======
+  const firebaseConfig = {
+    apiKey: "YOUR_FIREBASE_API_KEY",
+    authDomain: "YOUR_FIREBASE_APP.firebaseapp.com",
+    databaseURL: "https://YOUR_FIREBASE_APP.firebaseio.com",
+    projectId: "YOUR_FIREBASE_APP",
+    storageBucket: "YOUR_FIREBASE_APP.appspot.com",
+    messagingSenderId: "1234567890",
+    appId: "YOUR_APP_ID"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const database = firebase.database();
+
+  // ====== WEATHER API ======
+  const API_URL = "http://api.weatherapi.com/v1/current.json?key=8fb2a093513741f0a07160359251110";
+
+  async function checkIrrigation() {
+    const crop = document.getElementById('cropName').value;
+    const outputDiv = document.getElementById('output');
+    if (!crop) {
+      outputDiv.innerHTML = "<p>Please select a crop.</p>";
+      return;
+    }
+
+    outputDiv.innerHTML = "<p>Fetching weather data...</p>";
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(async position => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+
+        const response = await fetch(`${API_URL}&q=${lat},${lon}&aqi=no`);
+        const data = await response.json();
+
+        const temp = data.current.temp_c;
+        const humidity = data.current.humidity;
+        const condition = data.current.condition.text;
+        const rain = data.current.precip_mm;
+
+        const soilMoisture = Math.floor(Math.random() * 100); // random until real sensor
+
+        let adviceEnglish = "";
+        let adviceHindi = "";
+        let adviceKannada = "";
+
+        if (rain > 2 || humidity > 80) {
+          adviceEnglish = "💧 No irrigation needed — weather is humid or rainy.";
+          adviceHindi = "💧 सिंचाई की आवश्यकता नहीं है — मौसम आर्द्र या बरसाती है।";
+          adviceKannada = "💧 ನೀರಾವರಿ ಅಗತ್ಯವಿಲ್ಲ — ಹವಾಮಾನ ತೇವ ಅಥವಾ ಮಳೆಯಾಗಿದೆ.";
+        } else if (soilMoisture > 60) {
+          adviceEnglish = "🌱 Soil is moist enough — skip irrigation.";
+          adviceHindi = "🌱 मिट्टी में पर्याप्त नमी है — सिंचाई न करें।";
+          adviceKannada = "🌱 ಮಣ್ಣು ತೇವವಾಗಿದೆ — ನೀರಾವರಿ ಬೇಡ.";
+        } else {
+          adviceEnglish = "🚜 Soil is dry — irrigation recommended.";
+          adviceHindi = "🚜 मिट्टी सूखी है — सिंचाई की सिफारिश की जाती है।";
+          adviceKannada = "🚜 ಮಣ್ಣು ಒಣಗಿದೆ — ನೀರಾವರಿ ಶಿಫಾರಸು ಮಾಡಲಾಗಿದೆ.";
+        }
+
+        outputDiv.innerHTML = `
+          <h3>Results for ${crop}</h3>
+          <p><strong>Weather:</strong> ${condition}</p>
+          <p><strong>Temperature:</strong> ${temp}°C</p>
+          <p><strong>Humidity:</strong> ${humidity}%</p>
+          <p><strong>Rainfall:</strong> ${rain} mm</p>
+          <p><strong>Soil Moisture:</strong> ${soilMoisture}%</p>
+          <h3>${adviceEnglish}<br>${adviceHindi}<br>${adviceKannada}</h3>
+        `;
+
+        const record = {
+          crop: crop,
+          temperature: temp,
+          humidity: humidity,
+          rainfall: rain,
+          soilMoisture: soilMoisture,
+          advice: `${adviceEnglish} | ${adviceHindi} | ${adviceKannada}`,
+          timestamp: new Date().toLocaleString()
+        };
+        database.ref('irrigation_logs').push(record);
+
+        loadHistory();
+      }, () => {
+        outputDiv.innerHTML = "<p>Unable to access location. Please enable GPS.</p>";
+      });
+    } else {
+      outputDiv.innerHTML = "<p>Geolocation not supported in this browser.</p>";
+    }
+  }
+
+  function loadHistory() {
+    const list = document.getElementById('historyList');
+    list.innerHTML = "";
+    database.ref('irrigation_logs').limitToLast(5).on('value', snapshot => {
+      list.innerHTML = "";
+      snapshot.forEach(data => {
+        const entry = data.val();
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${entry.crop}</strong> - ${entry.timestamp}<br>${entry.advice}`;
+        list.prepend(li);
+      });
+    });
+  }
+
+  loadHistory();
+</script>
+</body>
+</html>
