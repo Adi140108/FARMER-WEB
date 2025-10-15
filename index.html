@@ -1,65 +1,41 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Smart Irrigation Advisor</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Smart Irrigation Advisor — Crop Duration & Forecast Aware</title>
 <style>
   body {
     font-family: 'Poppins', sans-serif;
-    background: linear-gradient(135deg, #74b9ff, #a29bfe);
-    color: #fff;
-    text-align: center;
-    padding: 40px;
+    background: linear-gradient(135deg,#74b9ff,#a29bfe);
+    color:#fff; text-align:center; padding:30px;
   }
-  .container {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 15px;
-    padding: 30px;
-    max-width: 550px;
-    margin: auto;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  .card {
+    background:rgba(255,255,255,0.12);
+    padding:25px; border-radius:12px;
+    max-width:700px; margin:auto;
+    box-shadow:0 6px 18px rgba(0,0,0,0.25);
   }
-  select, button {
-    margin-top: 15px;
-    padding: 10px;
-    border: none;
-    border-radius: 10px;
+  select, input, button {
+    padding:10px; border-radius:8px; border:none; margin:8px 6px;
   }
-  select {
-    width: 80%;
-  }
-  button {
-    background-color: #0984e3;
-    color: #fff;
-    cursor: pointer;
-  }
-  button:hover {
-    background-color: #74b9ff;
-  }
+  select, input { width:70%; }
+  button { background:#0984e3; color:#fff; cursor:pointer; }
+  button:hover { background:#74b9ff; }
   .output {
-    margin-top: 20px;
-    padding: 15px;
-    background-color: rgba(255,255,255,0.1);
-    border-radius: 10px;
+    text-align:left; background:rgba(255,255,255,0.07);
+    padding:15px; border-radius:10px; margin-top:15px;
   }
-  .history {
-    margin-top: 20px;
-    text-align: left;
-    background-color: rgba(255,255,255,0.1);
-    padding: 15px;
-    border-radius: 10px;
-  }
+  small { opacity:0.9; }
 </style>
 </head>
 <body>
 
-<div class="container">
+<div class="card">
   <h1>🌾 Smart Irrigation Advisor</h1>
-  <p>Select your crop and find out whether irrigation is needed today.</p>
+  <p>Select your crop and enter the <b>running month of the plant</b> (वर्तमान वृद्धि महीना / ಸಸ್ಯದ ಪ್ರಗತಿಯ ತಿಂಗಳು)</p>
 
-  <!-- Crop Selection Dropdown -->
-  <select id="cropName">
+  <select id="cropSel">
     <option value="">-- Select Crop --</option>
     <option value="Rice">Rice - धान - ಅಕ್ಕಿ</option>
     <option value="Wheat">Wheat - गेहूं - ಗೋಧಿ</option>
@@ -73,130 +49,174 @@
     <option value="Sunflower">Sunflower - सूरजमुखी - ಸೂರ್ಯಕಾಂತಿ</option>
     <option value="Onion">Onion - प्याज - ಈರುಳ್ಳಿ</option>
     <option value="Tomato">Tomato - टमाटर - ಟೊಮೆಟೊ</option>
-  </select>
+  </select><br>
 
-  <br />
-  <button onclick="checkIrrigation()">Check</button>
+  <input id="growthMonth" type="number" min="1" max="12" placeholder="Running month (1–6)" />
+  <br/>
+  <input id="sensorInput" type="number" min="0" max="100"
+         placeholder="Soil sensor value (0–100) — optional" />
+  <br/>
+  <small>Leave blank to simulate soil moisture.</small>
+  <br/>
+  <button onclick="checkIrrigation()">Check Irrigation</button>
 
   <div class="output" id="output"></div>
-  <div class="history" id="history">
-    <h3>Recent History</h3>
-    <ul id="historyList"></ul>
-  </div>
 </div>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
-
 <script>
-  // ====== FIREBASE CONFIG (replace with your Firebase credentials) ======
-  const firebaseConfig = {
-    apiKey: "YOUR_FIREBASE_API_KEY",
-    authDomain: "YOUR_FIREBASE_APP.firebaseapp.com",
-    databaseURL: "https://YOUR_FIREBASE_APP.firebaseio.com",
-    projectId: "YOUR_FIREBASE_APP",
-    storageBucket: "YOUR_FIREBASE_APP.appspot.com",
-    messagingSenderId: "1234567890",
-    appId: "YOUR_APP_ID"
+/* Crop-specific moisture targets and growth durations (months) */
+const cropSettings = {
+  Rice:{target:65,name:"Rice - धान - ಅಕ್ಕಿ",duration:4},
+  Wheat:{target:45,name:"Wheat - गेहूं - ಗೋಧಿ",duration:5},
+  Sugarcane:{target:60,name:"Sugarcane - गन्ना - ಕರಿಬೇಲು",duration:12},
+  Maize:{target:40,name:"Maize - मक्का - ಜೋಳ",duration:4},
+  Cotton:{target:30,name:"Cotton - कपास - ಹತ್ತಿ",duration:6},
+  Pulses:{target:30,name:"Pulses - दालें - ಬೇಳೆ",duration:3},
+  Groundnut:{target:35,name:"Groundnut - मूंगफली - ಕಡಲೆಕಾಯಿ",duration:5},
+  Millets:{target:25,name:"Millets - बाजरा - ಸಜ್ಜೆ",duration:3},
+  Soybean:{target:40,name:"Soybean - सोयाबीन - ಸೋಯಾಬೀನ್",duration:4},
+  Sunflower:{target:35,name:"Sunflower - सूरजमुखी - ಸೂರ್ಯಕಾಂತಿ",duration:4},
+  Onion:{target:50,name:"Onion - प्याज - ಈರುಳ್ಳಿ",duration:5},
+  Tomato:{target:45,name:"Tomato - टमाटर - ಟೊಮೆಟೊ",duration:4}
+};
+
+const API_KEY="8fb2a093513741f0a07160359251110";
+const RAIN_THRESHOLD=2,HUM_THRESHOLD=80,DELTA=7;
+
+/* Determine stage by crop duration and running month */
+function getStageByMonth(crop,month){
+  const total=cropSettings[crop].duration;
+  const ratio=month/total;
+  if(ratio<=0.25) return {mul:1.2,stage:"Early Growth"};
+  if(ratio<=0.5) return {mul:1.1,stage:"Vegetative Growth"};
+  if(ratio<=0.75) return {mul:1.0,stage:"Flowering"};
+  return {mul:0.9,stage:"Ripening/Harvest"};
+}
+
+/* Stage description multilingual */
+function getStageDescription(stage){
+  switch(stage){
+    case "Early Growth":
+      return {
+        en:"🌱 Crop is in early growth stage — maintain proper soil moisture.",
+        hi:"🌱 फसल प्रारंभिक वृद्धि चरण में है — उचित मिट्टी की नमी बनाए रखें।",
+        kn:"🌱 ಬೆಳೆ ಪ್ರಾರಂಭಿಕ ಬೆಳವಣಿಗೆಯ ಹಂತದಲ್ಲಿದೆ — ಸರಿಯಾದ ಮಣ್ಣಿನ ತೇವತೆ ಕಾಪಾಡಿ."
+      };
+    case "Vegetative Growth":
+      return {
+        en:"🌿 Crop is in vegetative growth stage — requires moderate irrigation.",
+        hi:"🌿 फसल वृद्धि चरण में है — मध्यम सिंचाई की आवश्यकता है।",
+        kn:"🌿 ಬೆಳೆ ಬೆಳವಣಿಗೆಯ ಹಂತದಲ್ಲಿದೆ — ಮಧ್ಯಮ ನೀರಾವರಿ ಅಗತ್ಯವಿದೆ."
+      };
+    case "Flowering":
+      return {
+        en:"🌸 Crop is in flowering stage — ensure regular moisture.",
+        hi:"🌸 फसल फूलने के चरण में है — नियमित नमी बनाए रखें।",
+        kn:"🌸 ಬೆಳೆ ಹೂ ಬೀಳುವ ಹಂತದಲ್ಲಿದೆ — ನಿರಂತರ ತೇವತೆ ಕಾಪಾಡಿ."
+      };
+    default:
+      return {
+        en:"🌾 Crop is in ripening stage — reduce irrigation gradually.",
+        hi:"🌾 फसल पकने के चरण में है — सिंचाई धीरे-धीरे कम करें।",
+        kn:"🌾 ಬೆಳೆ ಪಕ್ವ ಹಂತದಲ್ಲಿದೆ — ನೀರಾವರಿಯನ್ನು ಹಂತ ಹಂತವಾಗಿ ಕಡಿಮೆ ಮಾಡಿ."
+      };
+  }
+}
+
+/* Multilingual irrigation advice */
+function multilingualAdvice(level,target,forecastRain){
+  if(forecastRain){
+    return {
+      en:`🌧 Rain expected tomorrow — delay irrigation.`,
+      hi:`🌧 कल वर्षा की संभावना है — सिंचाई स्थगित करें।`,
+      kn:`🌧 ನಾಳೆ ಮಳೆ ನಿರೀಕ್ಷೆಯಿದೆ — ನೀರಾವರಿ ವಿಳಂಬಗೊಳಿಸಿ.`
+    };
+  }
+  if(level==="no") return {
+    en:`💧 No irrigation needed — weather is humid or rainy.`,
+    hi:`💧 सिंचाई की आवश्यकता नहीं है — मौसम आर्द्र या बरसाती है।`,
+    kn:`💧 ನೀರಾವರಿ ಅಗತ್ಯವಿಲ್ಲ — ಹವಾಮಾನ ತೇವ ಅಥವಾ ಮಳೆಯಾಗಿದೆ.`
   };
-  firebase.initializeApp(firebaseConfig);
-  const database = firebase.database();
+  if(level==="light") return {
+    en:`⚠️ Soil slightly below target (${target}%) — consider light irrigation.`,
+    hi:`⚠️ मिट्टी लक्षित स्तर (${target}%) से थोड़ी कम है — हल्की सिंचाई पर विचार करें।`,
+    kn:`⚠️ ಮಣ್ಣು ಗುರಿ (${target}%) ಗಿಂತ ಸ್ವಲ್ಪ ಕಡಿಮೆ — ಸಣ್ಣ ನೀರಾವರಿ ಪರಿಗಣಿಸಿ.`
+  };
+  return {
+    en:`🚜 Soil below target (${target}%) — irrigation recommended.`,
+    hi:`🚜 मिट्टी लक्षित स्तर (${target}%) से कम है — सिंचाई की सिफारिश की जाती है।`,
+    kn:`🚜 ಮಣ್ಣು ಗುರಿ (${target}%) ಗಿಂತ ಕಡಿಮೆ — ನೀರಾವರಿ ಶಿಫಾರಸು ಮಾಡಲಾಗಿದೆ.`
+  };
+}
 
-  // ====== WEATHER API ======
-  const API_URL = "http://api.weatherapi.com/v1/current.json?key=8fb2a093513741f0a07160359251110";
+/* Main logic */
+async function checkIrrigation(){
+  const cropKey=document.getElementById("cropSel").value;
+  const month=parseInt(document.getElementById("growthMonth").value);
+  const out=document.getElementById("output");
+  out.innerHTML="<p>Checking...</p>";
 
-  async function checkIrrigation() {
-    const crop = document.getElementById('cropName').value;
-    const outputDiv = document.getElementById('output');
-    if (!crop) {
-      outputDiv.innerHTML = "<p>Please select a crop.</p>";
-      return;
-    }
+  if(!cropKey){out.innerHTML="<p>Please select a crop.</p>";return;}
+  if(!month){out.innerHTML="<p>Please enter the running month of the crop.</p>";return;}
 
-    outputDiv.innerHTML = "<p>Fetching weather data...</p>";
-
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(async position => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-
-        const response = await fetch(`${API_URL}&q=${lat},${lon}&aqi=no`);
-        const data = await response.json();
-
-        const temp = data.current.temp_c;
-        const humidity = data.current.humidity;
-        const condition = data.current.condition.text;
-        const rain = data.current.precip_mm;
-
-        const soilMoisture = Math.floor(Math.random() * 100); // random until real sensor
-
-        let adviceEnglish = "";
-        let adviceHindi = "";
-        let adviceKannada = "";
-
-        if (rain > 2 || humidity > 80) {
-          adviceEnglish = "💧 No irrigation needed — weather is humid or rainy.";
-          adviceHindi = "💧 सिंचाई की आवश्यकता नहीं है — मौसम आर्द्र या बरसाती है।";
-          adviceKannada = "💧 ನೀರಾವರಿ ಅಗತ್ಯವಿಲ್ಲ — ಹವಾಮಾನ ತೇವ ಅಥವಾ ಮಳೆಯಾಗಿದೆ.";
-        } else if (soilMoisture > 60) {
-          adviceEnglish = "🌱 Soil is moist enough — skip irrigation.";
-          adviceHindi = "🌱 मिट्टी में पर्याप्त नमी है — सिंचाई न करें।";
-          adviceKannada = "🌱 ಮಣ್ಣು ತೇವವಾಗಿದೆ — ನೀರಾವರಿ ಬೇಡ.";
-        } else {
-          adviceEnglish = "🚜 Soil is dry — irrigation recommended.";
-          adviceHindi = "🚜 मिट्टी सूखी है — सिंचाई की सिफारिश की जाती है।";
-          adviceKannada = "🚜 ಮಣ್ಣು ಒಣಗಿದೆ — ನೀರಾವರಿ ಶಿಫಾರಸು ಮಾಡಲಾಗಿದೆ.";
-        }
-
-        outputDiv.innerHTML = `
-          <h3>Results for ${crop}</h3>
-          <p><strong>Weather:</strong> ${condition}</p>
-          <p><strong>Temperature:</strong> ${temp}°C</p>
-          <p><strong>Humidity:</strong> ${humidity}%</p>
-          <p><strong>Rainfall:</strong> ${rain} mm</p>
-          <p><strong>Soil Moisture:</strong> ${soilMoisture}%</p>
-          <h3>${adviceEnglish}<br>${adviceHindi}<br>${adviceKannada}</h3>
-        `;
-
-        const record = {
-          crop: crop,
-          temperature: temp,
-          humidity: humidity,
-          rainfall: rain,
-          soilMoisture: soilMoisture,
-          advice: `${adviceEnglish} | ${adviceHindi} | ${adviceKannada}`,
-          timestamp: new Date().toLocaleString()
-        };
-        database.ref('irrigation_logs').push(record);
-
-        loadHistory();
-      }, () => {
-        outputDiv.innerHTML = "<p>Unable to access location. Please enable GPS.</p>";
-      });
-    } else {
-      outputDiv.innerHTML = "<p>Geolocation not supported in this browser.</p>";
-    }
+  const crop=cropSettings[cropKey];
+  if(month>crop.duration){
+    out.innerHTML=`<p>This crop (${crop.name}) usually matures in ${crop.duration} months. Please enter a valid running month (1-${crop.duration}).</p>`;
+    return;
   }
 
-  function loadHistory() {
-    const list = document.getElementById('historyList');
-    list.innerHTML = "";
-    database.ref('irrigation_logs').limitToLast(5).on('value', snapshot => {
-      list.innerHTML = "";
-      snapshot.forEach(data => {
-        const entry = data.val();
-        const li = document.createElement('li');
-        li.innerHTML = `<strong>${entry.crop}</strong> - ${entry.timestamp}<br>${entry.advice}`;
-        list.prepend(li);
-      });
-    });
+  const stageInfo=getStageByMonth(cropKey,month);
+  const adjTarget=Math.round(crop.target*stageInfo.mul);
+  const stageDesc=getStageDescription(stageInfo.stage);
+
+  if(!navigator.geolocation){
+    out.innerHTML="<p>Geolocation not supported.</p>";return;
   }
 
-  loadHistory();
+  navigator.geolocation.getCurrentPosition(async pos=>{
+    try{
+      const lat=pos.coords.latitude, lon=pos.coords.longitude;
+      const res=await fetch(`https://api.weatherapi.com/v1/current.json?key=${API_KEY}&q=${lat},${lon}&aqi=no`);
+      const data=await res.json();
+
+      const forecastRes=await fetch(`https://api.weatherapi.com/v1/forecast.json?key=${API_KEY}&q=${lat},${lon}&days=2&aqi=no&alerts=no`);
+      const forecast=await forecastRes.json();
+      const tomorrowRain=forecast.forecast.forecastday[1].day.totalprecip_mm;
+
+      const temp=data.current.temp_c, hum=data.current.humidity;
+      const cond=data.current.condition.text, rain=data.current.precip_mm;
+
+      let soil=document.getElementById("sensorInput").value;
+      soil=soil?Number(soil):Math.round(10+Math.random()*70);
+
+      let level="yes";
+      let forecastRain=false;
+
+      if(tomorrowRain>3){ forecastRain=true; }
+      else if(rain>RAIN_THRESHOLD||hum>HUM_THRESHOLD) level="no";
+      else if(soil>=adjTarget) level="no";
+      else if(adjTarget-soil<=DELTA) level="light";
+
+      const adv=multilingualAdvice(level,adjTarget,forecastRain);
+
+      out.innerHTML=`
+        <h3>Results — ${crop.name}</h3>
+        <p><strong>Running Month:</strong> ${month} / ${crop.duration} | <strong>Stage:</strong> ${stageInfo.stage}</p>
+        <p><strong>Weather:</strong> ${cond}<br>
+        <strong>Temp:</strong> ${temp}°C | <strong>Humidity:</strong> ${hum}% | <strong>Rain Today:</strong> ${rain} mm</p>
+        <p><strong>Forecast Rain (Tomorrow):</strong> ${tomorrowRain} mm</p>
+        <p><strong>Soil Moisture:</strong> ${soil}% | <strong>Target:</strong> ${adjTarget}%</p>
+        <hr>
+        <h3>Advice</h3>
+        <p>${adv.en}<br>${adv.hi}<br>${adv.kn}</p>
+        <hr>
+        <h3>Stage Information</h3>
+        <p>${stageDesc.en}<br>${stageDesc.hi}<br>${stageDesc.kn}</p>`;
+    }catch(e){
+      out.innerHTML="<p>Error fetching weather data.</p>";
+    }
+  },()=>{out.innerHTML="<p>Please enable location access.</p>";});
+}
 </script>
-   <footer>
-                &copy; 2025 ADITHYA GOWDA
-            </footer>
 </body>
 </html>
